@@ -2,12 +2,13 @@ import io
 import customtkinter as ctk
 from PIL import Image
 import requests
+import os
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
-API_KEY = "YOUR_OPENWEATHERMAP_API_KEY"  # Replace with your OpenWeatherMap API key
-
+API_KEY = "ADD_YOUR_OPENWEATHERMAP_API_KEY_HERE"  # Replace with your OpenWeatherMap API key
+IPGEO_API_KEY = "ADD_YOUR_IPGEOLOCATION_API_KEY_HERE"  # Replace with your IP Geolocation API key
 
 class WeatherApp(ctk.CTk):
 
@@ -128,6 +129,63 @@ class WeatherApp(ctk.CTk):
             command=self.return_button,
         )
 
+        self.location_btn = ctk.CTkButton(
+            self.buttons_frame,
+            text="Use My Location",
+            width=150,
+            height=32,
+            corner_radius=15,
+            fg_color="#2b2b2b",
+            hover_color="#404040",
+            command=self.get_my_location,
+        )
+        self.location_btn.pack(
+            side="top",
+            anchor="center",
+            pady=10,
+            padx=5
+        )
+
+    def get_my_location(self):
+        self.desc_label.configure(text="Detecting your location...")
+        self.update_idletasks()
+
+        if not IPGEO_API_KEY:
+            self.desc_label.configure(text="Location API key is missing.")
+            return
+
+        try:
+            response = requests.get(
+                "https://api.ipgeolocation.io/v3/ipgeo",
+                params={"apiKey": IPGEO_API_KEY},
+                timeout=15,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            location = data.get("location", {})
+            city = location.get("city")
+            country = location.get("country_code2")
+
+            if not city:
+                self.desc_label.configure(text="Could not detect your city.")
+                return
+
+            search_city = f"{city},{country}" if country else city
+            self.city_entry.delete(0, "end")
+            self.city_entry.insert(0, search_city)
+            self.get_weather()
+
+        except requests.exceptions.RequestException as error:
+            print("Location API error:", error)
+            self.desc_label.configure(
+                text="Could not connect to location service."
+            )
+
+        except ValueError as error:
+            print("Invalid API response:", error)
+            self.desc_label.configure(text="Invalid location response.")
+
     def get_weather(self):
         city = self.city_entry.get().strip()
         if not city:
@@ -155,6 +213,11 @@ class WeatherApp(ctk.CTk):
                 pil_img = Image.open(io.BytesIO(icon_response.content))
                 ctk_img = ctk.CTkImage(
                     light_image=pil_img, dark_image=pil_img, size=(50, 50)
+        
+                )
+
+                small_img = ctk.CTkImage(
+                    light_image=pil_img, dark_image=pil_img, size=(25, 25)
                 )
 
                 # Save current data payload
@@ -165,6 +228,7 @@ class WeatherApp(ctk.CTk):
                     "humidity": f"Humidity: {humidity}%",
                     "wind": f"Wind: {wind_speed} m/s",
                     "img": ctk_img,
+                    "small_img": small_img,
                 }
 
                 # Update Main Page UI
@@ -181,6 +245,8 @@ class WeatherApp(ctk.CTk):
                 self.desc_label.configure(text="City not found!")
         except requests.exceptions.RequestException:
             self.desc_label.configure(text="Network Error!")
+
+            
 
     def add_city_button(self):
         if not self.current_city_data:
@@ -277,7 +343,10 @@ class WeatherApp(ctk.CTk):
                     border_color="#007BFF",
         
             )
-            self.new_city_card.pack(pady=8, padx=10)
+            self.new_city_card.pack(side="left", pady=8, padx=10)
+            self.new_city_card_count = getattr(self, "new_city_card_count", 0) + 1
+            if self.new_city_card_count == 3:
+                self.geometry("500x600")
 
             self.error_label.configure(text="City added successfully!", text_color="#007BFF")
 
@@ -285,21 +354,21 @@ class WeatherApp(ctk.CTk):
             lbl_city2 = ctk.CTkLabel(
                             self.new_city_card, text=city_data["city"], corner_radius=15, font=("Arial", 13, "bold")
                         )
-            lbl_city2.pack(anchor="w", padx=15, pady=3)
+            lbl_city2.pack(anchor="w", padx=10, pady=3)
             
             lbl_temp2 = ctk.CTkLabel(
                             self.new_city_card, text=city_data["temp"], corner_radius=30, font=("Arial", 12, "bold")
                         )
-            lbl_temp2.pack(anchor="w", padx=15, pady=3)
+            lbl_temp2.pack(anchor="w", padx=10, pady=2)
             
             lbl_desc2 = ctk.CTkLabel(
                             self.new_city_card, text=city_data["desc"], corner_radius=30, font=("Arial", 10, "italic")
                         )
-            lbl_desc2.pack(anchor="w", padx=15, pady=3)
+            lbl_desc2.pack(anchor="w", padx=10, pady=10)
 
         
-            icon_lbl2 = ctk.CTkLabel(self.new_city_card, width=10, height=10, bg_color="transparent", text="", image=city_data["img"])
-            icon_lbl2.place(relx=0.8, rely=0.5, anchor="center")
+            icon_lbl2 = ctk.CTkLabel(self.new_city_card, width=5, height=5, bg_color="transparent", text="", image=city_data["small_img"])
+            icon_lbl2.place(relx=0.8, rely=0.6, anchor="center")
 
         elif self.add_city_button_counter == 2:
             
@@ -310,7 +379,7 @@ class WeatherApp(ctk.CTk):
                     border_color="#007BFF",
         
             )
-            self.new_city_card.place(relx=0.9, rely=0.5, anchor="center", padx=10, pady=8)
+            self.new_city_card.pack(side="left", pady=8, padx=10)
 
             self.error_label.configure(text="City added successfully!", text_color="#007BFF")
 
@@ -331,7 +400,7 @@ class WeatherApp(ctk.CTk):
             lbl_desc2.pack(anchor="w", padx=15, pady=3)
 
         
-            icon_lbl2 = ctk.CTkLabel(self.new_city_card, width=10, height=10, bg_color="transparent", text="", image=city_data["img"])
+            icon_lbl2 = ctk.CTkLabel(self.new_city_card, width=10, height=10, bg_color="transparent", text="", image=city_data["small_img"])
             icon_lbl2.place(relx=0.8, rely=0.5, anchor="center")
 
         elif len(self.saved_cities) >= 5 :
@@ -339,6 +408,9 @@ class WeatherApp(ctk.CTk):
 
         elif self.add_city_button_counter >= 3:
             self.error_label.configure(text="Maximum of 3 cities added!", text_color="red")
+
+        elif self.add_city_button_counter == 3:
+            self.geometry("500x600")
 
         else:
             self.desc_label.configure(text="City already added!", text_color="007BFF")
